@@ -1,3 +1,5 @@
+const moment = require('moment');
+
 const parseLine = (lineToParse) => {
   const parsedLine = {};
   const mappings = {
@@ -35,6 +37,11 @@ const parseLine = (lineToParse) => {
 
 const parseHttpString = (httpString) => httpString.match(/[^ ]*/g).filter(item => item);
 
+const timestampToISOString = (timestamp) => {
+  const datetime = timestamp.replace(/\[|\]/g, '');
+
+  return moment(datetime , 'DD/MMM/YYYY:HH:mm:ss Z').utc().format();
+};
 
 module.exports = (lineToParse) => {
   const logObject = parseLine(lineToParse);
@@ -51,6 +58,14 @@ module.exports = (lineToParse) => {
   });
 
   delete logObject.httpString;
+
+  logObject.requestDateTime = timestampToISOString(logObject.requestDateTime);
+
+  Object.keys(logObject).forEach(key => {
+     if (logObject[key] === '-') {
+       logObject[key] = null;
+     }
+  });
 
   return logObject;
 };
