@@ -4,27 +4,30 @@ const s3 = new AWS.S3();
 const dynamodb = new AWS.DynamoDB();
 const parseLine = require('./logParser');
 
-const insertItem = (Item, callback) => {
+const insertItem = (Item) => new Promise((resolve, reject) => {
   dynamodb.putItem({
     TableName: 's3WebLogs',
     Item,
   }, function(err, data) {
     if (err) {
-      callback(err);
+      reject({
+        error: err,
+        message: 'Insert item error',
+        item: Item
+      });
     } else {
-      callback();
+      resolve(data);
     }
   });
-};
+});
 
-exports.handler = (event, context, callback) => {
-  const params = {
-    Bucket: 'logs-test-tracking',
-    Key: 'track2017-11-15-12-18-42-BA44A933743330FC'
-  };
-
+const processLog = (params) => new Promise((resolve, reject) => {
   const fileStream = s3.getObject(params).createReadStream();
-  fileStream.on('error', err => callback(err));
+  fileStream.on('error', err => reject({
+    error: err,
+    params,
+    message: 'Get object error'
+  }));
 
   const rl = readline.createInterface({
     input: fileStream
@@ -46,6 +49,16 @@ exports.handler = (event, context, callback) => {
       }
     });
 
-    insertItem(item);
+    insertItem(item).then(resolve).catch(reject);
   });
+});
+
+exports.handler = (event, context, callback) => {
+  const promises = event.Records.map(record => processLog({
+      Bucket: record.s3.bucket.name,
+      Key: record.s3.object.key
+    }).catch(err => console.error(JSON.stringify(err)))
+  );
+
+  Promise.all(promises).then(() => callback());
 };
